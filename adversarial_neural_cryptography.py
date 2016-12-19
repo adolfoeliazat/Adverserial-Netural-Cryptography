@@ -5,14 +5,9 @@ import matplotlib.pyplot as plt
 from layers import LeNetConvPoolLayer, HiddenLayer, get_all_params
 from lasagne.updates import adam
 
-# Parameters
-batch_size = 512
-msg_len = 12
-key_len = 12
-comm_len = 12
+from config import *
 
 # Set this flag to exclude convolutional layers from the networks
-skip_conv = False
 
 # Function to generate n random messages and keys
 def gen_data(n=batch_size, msg_len=msg_len, key_len=key_len):
@@ -224,18 +219,18 @@ adversarial_iterations = 60
 
 # Perform adversarial training
 for i in range(adversarial_iterations):
-    n = 2000
+
     print_every = 100
     print 'training bob and alice, run:', i+1
-    results_bob = train('bob', results_bob, n, print_every, es=0.01)
+    results_bob = train('bob', results_bob, n_iterations, print_every, es=0.01)
     print 'training eve, run:', i+1
-    results_eve = train('eve', results_eve, n, print_every, es=0.01)
+    results_eve = train('eve', results_eve, n_iterations, print_every, es=0.01)
 
 # Plot the results
-plt.plot([np.min(results_bob[i:i+n]) for i in np.arange(0, 
-          len(results_bob), n)])
-plt.plot([np.min(results_eve[i:i+n]) for i in np.arange(0, 
-          len(results_eve), n)])
+plt.plot([np.min(results_bob[i:i+n_iterations]) for i in np.arange(0, 
+          len(results_bob), n_iterations)])
+plt.plot([np.min(results_eve[i:i+n_iterations]) for i in np.arange(0, 
+          len(results_eve), n_iterations)])
 plt.legend(['bob', 'eve'])
 plt.xlabel('adversarial iteration')
 plt.ylabel('lowest decryption error achieved')
