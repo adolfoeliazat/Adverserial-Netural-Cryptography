@@ -12,7 +12,7 @@ from theano.tensor.nnet import conv2d
 from theano.tensor.signal import pool
 
 # Function to extract all the params from a list of layers
-def get_all_params(layers):
+def collect_params(layers):
     out = []
     for l in layers:
         for p in l.params:

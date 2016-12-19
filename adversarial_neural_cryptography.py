@@ -2,7 +2,7 @@ import theano
 import theano.tensor as T
 import numpy as np
 import matplotlib.pyplot as plt
-from layers import LeNetConvPoolLayer, HiddenLayer, get_all_params
+from layers import LeNetConvPoolLayer, HiddenLayer, collect_params
 from lasagne.updates import adam
 
 from config import *
@@ -124,25 +124,24 @@ loss_bob = decrypt_err_bob + (1. - decrypt_err_eve) ** 2.
 
 
 # Get all the parameters for Bob and Alice, make updates, train and pred funcs
-params   = {'bob' : get_all_params([bob_conv, bob_hid, 
-                                    alice_conv, alice_hid])}
-updates  = {'bob' : adam(loss_bob, params['bob'])}
-err_fn   = {'bob' : theano.function(inputs=[msg_in, key],
-                                    outputs=decrypt_err_bob)}
-train_fn = {'bob' : theano.function(inputs=[msg_in, key],
+params_bob  = collect_params([bob_conv, bob_hid, alice_conv, alice_hid])
+updates_bob  = adam(loss_bob, params_bob)
+error_bob   = theano.function(inputs=[msg_in, key],
+                                    outputs=decrypt_err_bob)
+train_bob = theano.function(inputs=[msg_in, key],
                                     outputs=loss_bob,
-                                    updates=updates['bob'])}
-pred_fn  = {'bob' : theano.function(inputs=[msg_in, key], outputs=bob_msg)}
+                                    updates=updates_bob)
+pred_bob  = theano.function(inputs=[msg_in, key], outputs=bob_msg)
 
 # Get all the parameters for Eve, make updates, train and pred funcs
-params['eve']   = get_all_params([eve_hid1, eve_hid2, eve_conv])
-updates['eve']  = adam(decrypt_err_eve, params['eve'])
-err_fn['eve']   = theano.function(inputs=[msg_in, key],
+params_eve   = collect_params([eve_hid1, eve_hid2, eve_conv])
+updates_eve  = adam(decrypt_err_eve, params['eve'])
+error_eve   = theano.function(inputs=[msg_in, key],
                                   outputs=decrypt_err_eve)
-train_fn['eve'] = theano.function(inputs=[msg_in, key],
+train_eve = theano.function(inputs=[msg_in, key],
                                   outputs=decrypt_err_eve,
                                   updates=updates['eve'])
-pred_fn['eve']  = theano.function(inputs=[msg_in, key], outputs=eve_msg)
+pred_eve  = theano.function(inputs=[msg_in, key], outputs=eve_msg)
 
 # Function for training either Bob+Alice or Eve for some time
 def train(bob_or_eve, results, max_iters, print_every, es=0., es_limit=100):
@@ -151,10 +150,12 @@ def train(bob_or_eve, results, max_iters, print_every, es=0., es_limit=100):
         # Generate some data
         msg_in_val, key_val = gen_data()
         # Train on this batch and get loss
-        loss = train_fn[bob_or_eve](msg_in_val, key_val)
-        # Store absolute decryption error of the model on this batch
-        results = np.hstack((results, 
-                             err_fn[bob_or_eve](msg_in_val, key_val).sum()))
+        if bob_or_eve == 'bob':
+            loss = train_bob(msg_in_val, key_val)
+            results = np.hstack((results, error_bob(msg_in_val, key_val).sum()))
+        elif bob_or_eve == 'eve':
+            loss = train_eve(msg_in_val, key_val)
+            results = np.hstack((results, error_eve(msg_in_val, key_val).sum()))
         # Print loss now and then
         if i % print_every == 0:
             print 'training loss:', loss
