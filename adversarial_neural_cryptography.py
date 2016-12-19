@@ -3,7 +3,7 @@ import theano.tensor as T
 import numpy as np
 import matplotlib.pyplot as plt
 from utils import LeNetConvPoolLayer, HiddenLayer, collect_params, generate_data
-from lasagne.updates import adam
+from lasagne.updates import adam, sgd
 
 from config import *
 
