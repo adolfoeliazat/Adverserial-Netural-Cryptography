@@ -6,7 +6,7 @@ from layers import LeNetConvPoolLayer, HiddenLayer, collect_params
 from lasagne.updates import adam
 
 from config import *
-from utils import gen_data, assess, err_over_samples
+from utils import generate_data
 
 rng = np.random.RandomState(29797)
 
@@ -148,7 +148,7 @@ def train(bob_or_eve, results, max_iters, print_every, es=0., es_limit=100):
     count = 0
     for i in range(max_iters):
         # Generate some data
-        msg_in_val, key_val = gen_data()
+        msg_in_val, key_val = generate_data()
         # Train on this batch and get loss
         if bob_or_eve == 'bob':
             loss = train_bob(msg_in_val, key_val)
