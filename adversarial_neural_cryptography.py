@@ -172,6 +172,8 @@ results_bob, results_eve = [], []
 # Perform adversarial training
 
 def run_adverserial_training():
+    results_bob = [] 
+    results_eve = []
     for i in range(adversarial_iterations):
 
         print 'training bob and alice, run:', i+1
