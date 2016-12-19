@@ -6,33 +6,14 @@ from layers import LeNetConvPoolLayer, HiddenLayer, get_all_params
 from lasagne.updates import adam
 
 from config import *
-
-# Set this flag to exclude convolutional layers from the networks
-
-# Function to generate n random messages and keys
-def gen_data(n=batch_size, msg_len=msg_len, key_len=key_len):
-    return (np.random.randint(0, 2, size=(n, msg_len))*2-1).\
-                astype(theano.config.floatX),\
-           (np.random.randint(0, 2, size=(n, key_len))*2-1).\
-                astype(theano.config.floatX)
-
-# Function to assess a batch by eye (see what the errors look like)
-def assess(pred_fn, n=batch_size, msg_len=msg_len, key_len=key_len):
-    msg_in_val, key_val = gen_data(n, msg_len, key_len)
-    return np.round(np.abs(msg_in_val[0:n] - \
-           pred_fn(msg_in_val[0:n], key_val[0:n])), 0)
-
-# Function to get the error over just one batch
-def err_over_samples(err_fn, n=batch_size):
-    msg_in_val, key_val = gen_data(n)
-    return err_fn(msg_in_val[0:n], key_val[0:n])
-
+from utils import gen_data, assess, err_over_samples
 
 rng = np.random.RandomState(29797)
 
-class StandardConvSetup():
+class AdverserialConvSetup():
     '''
-    Standard convolutional layers setup used by Alice, Bob and Eve.
+    Adverserial convolutional layers setup used by Alice, Bob and Eve.
+    Made up of 4 convolution layers (without maxpooling)
     Input should be 4d tensor of shape (batch_size, 1, msg_len + key_len, 1)
     Output is 4d tensor of shape (batch_size, 1, msg_len, 1)
     '''
@@ -79,13 +60,7 @@ class StandardConvSetup():
         
         self.output = self.conv_layer4.output
         
-        self.params = self.conv_layer1.params + self.conv_layer2.params + self.conv_layer3.params + self.conv_layer4.params
-        # self.layers = [self.conv_layer1, self.conv_layer2, 
-        #                self.conv_layer3, self.conv_layer4]
-        # self.params = []
-        # for l in self.layers:
-        #     self.params += l.params
-        
+        self.params = self.conv_layer1.params + self.conv_layer2.params + self.conv_layer3.params + self.conv_layer4.params        
             
 # Tensor variables for the message and key
 msg_in = T.matrix('msg_in')
@@ -100,20 +75,12 @@ alice_hid = HiddenLayer(rng,
                         n_in = msg_len + key_len,
                         n_out = msg_len + key_len,
                         activation = T.nnet.relu)
-if skip_conv:
-    alice_conv = HiddenLayer(rng,
-                             input = alice_hid.output,
-                             n_in = msg_len + key_len,
-                             n_out = msg_len,
-                             activation = T.tanh)
-    alice_comm = alice_conv.output
-else:
-    # Reshape the output of Alice's hidden layer for convolution
-    alice_conv_in = alice_hid.output.reshape((batch_size, 1, msg_len + key_len, 1))
-    # Alice's convolutional layers
-    alice_conv = StandardConvSetup(alice_conv_in, 'alice')
-    # Get the output communication
-    alice_comm = alice_conv.output.reshape((batch_size, msg_len))
+# Reshape the output of Alice's hidden layer for convolution
+alice_conv_in = alice_hid.output.reshape((batch_size, 1, msg_len + key_len, 1))
+# Alice's convolutional layers
+alice_conv = AdverserialConvSetup(alice_conv_in, 'alice')
+# Get the output communication
+alice_comm = alice_conv.output.reshape((batch_size, msg_len))
 
 # Bob's input is the concatenation of Alice's communication and the key
 bob_in = T.concatenate([alice_comm, key], axis=1)
@@ -123,17 +90,10 @@ bob_hid = HiddenLayer(rng,
                       n_in = comm_len + key_len,
                       n_out = comm_len + key_len,
                       activation = T.nnet.relu)
-if skip_conv:
-    bob_conv = HiddenLayer(rng,
-                           input = bob_hid.output,
-                           n_in = comm_len + key_len,
-                           n_out = msg_len,
-                           activation = T.tanh)
-    bob_msg = bob_conv.output
-else:
-    bob_conv_in = bob_hid.output.reshape((batch_size, 1, comm_len + key_len, 1))
-    bob_conv = StandardConvSetup(bob_conv_in, 'bob')
-    bob_msg = bob_conv.output.reshape((batch_size, msg_len))
+
+bob_conv_in = bob_hid.output.reshape((batch_size, 1, comm_len + key_len, 1))
+bob_conv = AdverserialConvSetup(bob_conv_in, 'bob')
+bob_msg = bob_conv.output.reshape((batch_size, msg_len))
 
 # Eve see's Alice's communication to Bob, but not the key
 # She gets an extra hidden layer to try and learn to decrypt the message
@@ -149,17 +109,9 @@ eve_hid2 = HiddenLayer(rng,
                        n_out = comm_len + key_len,
                        activation = T.nnet.relu)
 
-if skip_conv:
-    eve_conv = HiddenLayer(rng,
-                           input = eve_hid2.output,
-                           n_in = comm_len + key_len,
-                           n_out = msg_len,
-                           activation = T.tanh)
-    eve_msg = eve_conv.output
-else:
-    eve_conv_in = eve_hid2.output.reshape((batch_size, 1, comm_len + key_len, 1))
-    eve_conv = StandardConvSetup(eve_conv_in, 'eve')
-    eve_msg = eve_conv.output.reshape((batch_size, msg_len))
+eve_conv_in = eve_hid2.output.reshape((batch_size, 1, comm_len + key_len, 1))
+eve_conv = AdverserialConvSetup(eve_conv_in, 'eve')
+eve_msg = eve_conv.output.reshape((batch_size, msg_len))
 
 # Eve's loss function is the L1 norm between true and recovered msg
 decrypt_err_eve = T.mean(T.abs_(msg_in - eve_msg))
@@ -185,9 +137,9 @@ pred_fn  = {'bob' : theano.function(inputs=[msg_in, key], outputs=bob_msg)}
 # Get all the parameters for Eve, make updates, train and pred funcs
 params['eve']   = get_all_params([eve_hid1, eve_hid2, eve_conv])
 updates['eve']  = adam(decrypt_err_eve, params['eve'])
-err_fn['eve']   = theano.function(inputs=[msg_in, key], 
+err_fn['eve']   = theano.function(inputs=[msg_in, key],
                                   outputs=decrypt_err_eve)
-train_fn['eve'] = theano.function(inputs=[msg_in, key], 
+train_fn['eve'] = theano.function(inputs=[msg_in, key],
                                   outputs=decrypt_err_eve,
                                   updates=updates['eve'])
 pred_fn['eve']  = theano.function(inputs=[msg_in, key], outputs=eve_msg)
@@ -215,23 +167,26 @@ def train(bob_or_eve, results, max_iters, print_every, es=0., es_limit=100):
 
 # Initialise some empty results arrays
 results_bob, results_eve = [], []
-adversarial_iterations = 60
+
 
 # Perform adversarial training
-for i in range(adversarial_iterations):
 
-    print_every = 100
-    print 'training bob and alice, run:', i+1
-    results_bob = train('bob', results_bob, n_iterations, print_every, es=0.01)
-    print 'training eve, run:', i+1
-    results_eve = train('eve', results_eve, n_iterations, print_every, es=0.01)
+def run_adverserial_training():
+    for i in range(adversarial_iterations):
 
+        print 'training bob and alice, run:', i+1
+        results_bob = train('bob', results_bob, n_iterations, n_iterations*printing_factor, es=early_stopping_criterion)
+        print 'training eve, run:', i+1
+        results_eve = train('eve', results_eve, n_iterations, n_iterations*printing_factor, es=early_stopping_criterion)
+
+    return results_bob, results_eve
 # Plot the results
-plt.plot([np.min(results_bob[i:i+n_iterations]) for i in np.arange(0, 
-          len(results_bob), n_iterations)])
-plt.plot([np.min(results_eve[i:i+n_iterations]) for i in np.arange(0, 
-          len(results_eve), n_iterations)])
-plt.legend(['bob', 'eve'])
-plt.xlabel('adversarial iteration')
-plt.ylabel('lowest decryption error achieved')
-plt.show()
+
+if __name__=='__main__':
+    results_bob, results_eve = run_adverserial_training()
+    plt.plot([np.min(results_bob[i:i+n_iterations]) for i in np.arange(0, len(results_bob), n_iterations)])
+    plt.plot([np.min(results_eve[i:i+n_iterations]) for i in np.arange(0, len(results_eve), n_iterations)])
+    plt.legend(['bob', 'eve'])
+    plt.xlabel('Adversarial Iteration')
+    plt.ylabel('Decryption Error')
+    plt.show()
