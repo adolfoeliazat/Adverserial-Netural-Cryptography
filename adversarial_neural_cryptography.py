@@ -135,12 +135,12 @@ pred_bob  = theano.function(inputs=[msg_in, key], outputs=bob_msg)
 
 # Get all the parameters for Eve, make updates, train and pred funcs
 params_eve   = collect_params([eve_hid1, eve_hid2, eve_conv])
-updates_eve  = adam(decrypt_err_eve, params['eve'])
+updates_eve  = adam(decrypt_err_eve, params_eve)
 error_eve   = theano.function(inputs=[msg_in, key],
                                   outputs=decrypt_err_eve)
 train_eve = theano.function(inputs=[msg_in, key],
                                   outputs=decrypt_err_eve,
-                                  updates=updates['eve'])
+                                  updates=updates_eve)
 pred_eve  = theano.function(inputs=[msg_in, key], outputs=eve_msg)
 
 # Function for training either Bob+Alice or Eve for some time
